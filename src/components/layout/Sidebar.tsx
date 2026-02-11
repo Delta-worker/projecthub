@@ -12,6 +12,7 @@ import {
   Settings,
   ChevronLeft,
   ChevronRight,
+  X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -19,17 +20,18 @@ import { Button } from '@/components/ui/button';
 interface SidebarProps {
   collapsed?: boolean;
   onToggle?: () => void;
+  onCloseMobile?: () => void;
 }
 
 const navItems = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/kanban', label: 'Kanban', icon: Kanban },
   { href: '/documents', label: 'Documents', icon: FileText },
-  { href: '/requirements', label: 'Requirements', icon: Target },
+  { href: '/requirements', label: 'Feature Requests', icon: Target },
   { href: '/chat', label: 'AI Chat', icon: Bot },
 ];
 
-export function Sidebar({ collapsed = false, onToggle }: SidebarProps) {
+export function Sidebar({ collapsed = false, onToggle, onCloseMobile }: SidebarProps) {
   const pathname = usePathname();
 
   return (
@@ -52,18 +54,30 @@ export function Sidebar({ collapsed = false, onToggle }: SidebarProps) {
               <span className="font-semibold">ProjectHub</span>
             </Link>
           )}
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={onToggle}
-            className={cn(collapsed && 'mx-auto')}
-          >
-            {collapsed ? (
-              <ChevronRight className="h-4 w-4" />
-            ) : (
-              <ChevronLeft className="h-4 w-4" />
+          <div className="flex items-center gap-2">
+            {onCloseMobile && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={onCloseMobile}
+                className="lg:hidden"
+              >
+                <X className="h-4 w-4" />
+              </Button>
             )}
-          </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onToggle}
+              className={cn(collapsed && 'mx-auto')}
+            >
+              {collapsed ? (
+                <ChevronRight className="h-4 w-4" />
+              ) : (
+                <ChevronLeft className="h-4 w-4" />
+              )}
+            </Button>
+          </div>
         </div>
 
         {/* Navigation */}
@@ -75,6 +89,7 @@ export function Sidebar({ collapsed = false, onToggle }: SidebarProps) {
               <Link
                 key={item.href}
                 href={item.href}
+                onClick={onCloseMobile}
                 className={cn(
                   'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
                   isActive
@@ -93,6 +108,7 @@ export function Sidebar({ collapsed = false, onToggle }: SidebarProps) {
         <div className="border-t p-3">
           <Link
             href="/settings"
+            onClick={onCloseMobile}
             className={cn(
               'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-accent-foreground',
               collapsed && 'justify-center'

@@ -71,7 +71,7 @@ function initializeDb() {
     )
   `);
   
-  // Requirements table
+  // Requirements table (used for Feature Requests)
   database.exec(`
     CREATE TABLE IF NOT EXISTS requirements (
       id TEXT PRIMARY KEY,
@@ -84,6 +84,7 @@ function initializeDb() {
       status TEXT DEFAULT 'draft',
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      archived_at TEXT,
       FOREIGN KEY (project_id) REFERENCES projects(id)
     )
   `);
@@ -97,6 +98,22 @@ function initializeDb() {
       avatar TEXT,
       role TEXT DEFAULT 'viewer',
       created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  
+  // Milestones table
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS milestones (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      description TEXT,
+      due_date TEXT,
+      status TEXT DEFAULT 'upcoming',
+      progress INTEGER DEFAULT 0,
+      project_id TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (project_id) REFERENCES projects(id)
     )
   `);
   
@@ -114,6 +131,27 @@ function initializeDb() {
       FOREIGN KEY (project_id) REFERENCES projects(id)
     )
   `);
+  
+  // Add archived_at column if it doesn't exist (for existing databases)
+  try {
+    database.exec(`ALTER TABLE requirements ADD COLUMN archived_at TEXT`);
+  } catch (e) {
+    // Column already exists
+  }
+  
+  // Add notes column for PM progress updates
+  try {
+    database.exec(`ALTER TABLE requirements ADD COLUMN notes TEXT DEFAULT ''`);
+  } catch (e) {
+    // Column already exists
+  }
+  
+  // Add linked_tasks_completed column
+  try {
+    database.exec(`ALTER TABLE requirements ADD COLUMN linked_tasks_completed INTEGER DEFAULT 0`);
+  } catch (e) {
+    // Column already exists
+  }
   
   // Create default project if none exists
   const projectCount = database.prepare('SELECT COUNT(*) as count FROM projects').get() as { count: number };

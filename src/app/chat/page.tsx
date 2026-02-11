@@ -1,11 +1,11 @@
 'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Header } from '@/components/layout/Header';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Bot, Send, User, Sparkles, Loader2 } from 'lucide-react';
+import { Bot, Send, User, Sparkles, Loader2, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 // Message type
@@ -16,28 +16,61 @@ interface Message {
   timestamp: string;
 }
 
-const initialMessages: Message[] = [
-  {
-    id: 'msg-1',
-    role: 'assistant',
-    content:
-      "Hello! I'm your AI project assistant. I can help you with:\n\n• Understanding project requirements and specifications\n• Finding information in your documents\n• Tracking task progress and dependencies\n• Generating reports and summaries\n• Suggesting next steps for development\n\nWhat would you like to know about the DrillCore AI project?",
-    timestamp: '2026-02-10T09:00:00Z',
-  },
-];
+interface Task {
+  id: string;
+  title: string;
+  status: string;
+  priority: string;
+}
 
-const suggestedQuestions = [
-  "What's the current project status?",
-  'Show me the top priority requirements',
-  'What tasks are in development?',
-  'Generate a project summary',
-];
+interface Document {
+  id: string;
+  title: string;
+  content: string;
+  category: string;
+}
+
+interface Requirement {
+  id: string;
+  title: string;
+  status: string;
+  priority: string;
+}
 
 export default function ChatPage() {
-  const [messages, setMessages] = useState<Message[]>(initialMessages);
+  const [messages, setMessages] = useState<Message[]>([
+    {
+      id: 'msg-1',
+      role: 'assistant',
+      content: "Hello! I'm your DrillCore AI assistant. I can help you:\n\n• Understand project requirements\n• Track task progress across all stages\n• Find information in your documents\n• Generate project summaries\n\nWhat would you like to know?",
+      timestamp: new Date().toISOString(),
+    },
+  ]);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [documents, setDocuments] = useState<Document[]>([]);
+  const [requirements, setRequirements] = useState<Requirement[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const fetchProjectData = useCallback(async () => {
+    try {
+      const [tasksRes, docsRes, reqsRes] = await Promise.all([
+        fetch('/api/tasks'),
+        fetch('/api/documents'),
+        fetch('/api/requirements'),
+      ]);
+      setTasks(await tasksRes.json());
+      setDocuments(await docsRes.json());
+      setRequirements(await reqsRes.json());
+    } catch (error) {
+      console.error('Failed to fetch project data:', error);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchProjectData();
+  }, [fetchProjectData]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -46,6 +79,80 @@ export default function ChatPage() {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  const generateResponse = (question: string): string => {
+    const q = question.toLowerCase();
+
+    // Task-related queries
+    if (q.includes('task') || q.includes('todo')) {
+      const backlog = tasks.filter(t => t.status === 'backlog');
+      const progress = tasks.filter(t => t.status === 'in-progress');
+      const done = tasks.filter(t => t.status === 'done');
+      
+      return `**Task Overview**\n\n` +
+        `• **Backlog:** ${backlog.length} tasks\n` +
+        `• **In Progress:** ${progress.length} tasks\n` +
+        `• **Done:** ${done.length} tasks\n\n` +
+        `**Current Tasks:**\n` +
+        progress.map(t => `- ${t.title}`).join('\n') || 'No tasks in progress';
+    }
+
+    // Requirements queries
+    if (q.includes('requirement') || q.includes('spec')) {
+      const must = requirements.filter(r => r.priority === 'must');
+      const should = requirements.filter(r => r.priority === 'should');
+      
+      return `**Requirements Summary**\n\n` +
+        `**Must Have (${must.length}):**\n` +
+        must.map(r => `- ${r.title}`).join('\n') || 'None\n\n' +
+        `**Should Have (${should.length}):**\n` +
+        should.map(r => `- ${r.title}`).join('\n') || 'None';
+    }
+
+    // Document queries
+    if (q.includes('document') || q.includes('doc')) {
+      return `**Documents (${documents.length})**\n\n` +
+        documents.slice(0, 5).map(d => `- ${d.title}`).join('\n') +
+        (documents.length > 5 ? `\n...and ${documents.length - 5} more` : '');
+    }
+
+    // Status queries
+    if (q.includes('status') || q.includes('progress') || q.includes('how')) {
+      const done = tasks.filter(t => t.status === 'done').length;
+      const total = tasks.length;
+      const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+      
+      return `**Project Status**\n\n` +
+        `**Progress:** ${pct}% complete\n` +
+        `**Total Tasks:** ${total}\n` +
+        `**Documents:** ${documents.length}\n` +
+        `**Requirements:** ${requirements.length}\n\n` +
+        `**Quick Stats:**\n` +
+        `• ${tasks.filter(t => t.status === 'done').length} tasks completed\n` +
+        `• ${tasks.filter(t => t.status === 'in-progress').length} in progress\n` +
+        `• ${tasks.filter(t => t.status === 'backlog').length} in backlog`;
+    }
+
+    // Summary
+    if (q.includes('summary') || q.includes('overview')) {
+      return `**DrillCore AI - Project Summary**\n\n` +
+        `**Progress:** ${tasks.length > 0 ? Math.round((tasks.filter(t => t.status === 'done').length / tasks.length) * 100) : 0}%\n` +
+        `**Tasks:** ${tasks.length} total (${tasks.filter(t => t.status === 'done').length} done)\n` +
+        `**Documents:** ${documents.length}\n` +
+        `**Requirements:** ${requirements.length}\n\n` +
+        `**Recent Activity:**\n` +
+        `- ${documents[0]?.title || 'No documents'}\n` +
+        `- ${tasks.filter(t => t.status === 'done')[0]?.title || 'No completed tasks'}`;
+    }
+
+    return `I understand you're asking about: *"${question}"*\n\n` +
+      `I can help with:\n` +
+      `• Task status and progress\n` +
+      `• Requirements overview\n` +
+      `• Document search\n` +
+      `• Project summaries\n\n` +
+      `Try asking: "Show me tasks" or "What requirements do we have?"`;
+  };
 
   const handleSend = async () => {
     if (!inputValue.trim() || isLoading) return;
@@ -61,38 +168,20 @@ export default function ChatPage() {
     setInputValue('');
     setIsLoading(true);
 
-    // Simulate AI response (in production, this would call OpenAI API)
-    setTimeout(() => {
-      const responses: Record<string, string> = {
-        "what's the current project status?":
-          "**DrillCore AI Project Status** (Updated: Today)\n\n**Phase:** Development (Phase 1 of 2)\n\n**Completed:**\n- ✅ Project architecture defined\n- ✅ Tech stack selected (Next.js, TypeScript, Tailwind)\n- ✅ Dashboard layout created\n- ✅ Kanban board structure implemented\n\n**In Progress:**\n- 🔄 Kanban drag-and-drop functionality\n- 🔄 SQLite database integration\n\n**Next Steps:**\n1. Complete drag-and-drop implementation\n2. Build document repository module\n3. Implement AI chat integration",
-        'show me the top priority requirements':
-          "**Top Priority Requirements (Must Have)**\n\n1. **CSV File Upload and Parsing** ✅ Completed\n   - Drag-and-drop upload\n   - Automatic column detection\n   - Drillhole data validation\n\n2. **Interactive Data Visualizations** 🔄 In Progress\n   - Histograms for numerical data\n   - Scatter plots (grade vs depth)\n   - Cross-section views\n\n3. **AI-Powered Data Exploration** 📋 Approved\n   - Natural language chat\n   - Context-aware responses\n   - Chart generation from text",
-        'what tasks are in development?':
-          "**Tasks Currently in Development**\n\n1. **Implement Kanban board with drag-and-drop**\n   - Using @hello-pangea/dnd library\n   - Expected completion: Today\n\n2. **Build task CRUD API endpoints**\n   - REST API for task management\n   - Database integration\n   - Status: Started",
-        'generate a project summary':
-          "**DrillCore AI - Project Summary**\n\n**Objective:** Build a cloud-native platform for geologists to analyze drillhole CSV data with AI-powered insights.\n\n**Timeline:** 2 weeks (Phase 1)\n**Progress:** 40% complete\n\n**Key Accomplishments:**\n- Full project plan created\n- Next.js project initialized\n- Dashboard layout implemented\n- Kanban board structure ready\n\n**Remaining Work:**\n- Complete drag-and-drop\n- Database integration\n- Document repository\n- AI chat interface\n\n**Risks:** None identified",
-      };
+    // Simulate AI thinking time
+    await new Promise(resolve => setTimeout(resolve, 800));
 
-      const key = inputValue.toLowerCase();
-      let response =
-        responses[
-          Object.keys(responses).find((k) => key.includes(k)) || ''
-        ] ||
-        "I understand you're asking about: *" +
-          inputValue +
-          "*\n\nI'm your AI project assistant. I can help you:\n\n• Understand project requirements\n• Find information in documents\n• Track task progress\n• Generate reports\n\nCould you be more specific about what you'd like to know?";
+    const response = generateResponse(inputValue);
 
-      const aiMessage: Message = {
-        id: `msg-${Date.now() + 1}`,
-        role: 'assistant',
-        content: response,
-        timestamp: new Date().toISOString(),
-      };
+    const aiMessage: Message = {
+      id: `msg-${Date.now() + 1}`,
+      role: 'assistant',
+      content: response,
+      timestamp: new Date().toISOString(),
+    };
 
-      setMessages((prev) => [...prev, aiMessage]);
-      setIsLoading(false);
-    }, 1500);
+    setMessages((prev) => [...prev, aiMessage]);
+    setIsLoading(false);
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -102,17 +191,37 @@ export default function ChatPage() {
     }
   };
 
+  const suggestedQuestions = [
+    'How is the project progressing?',
+    'Show me current tasks',
+    'What requirements do we have?',
+    'Give me a project summary',
+  ];
+
+  const stats = {
+    total: tasks.length,
+    done: tasks.filter(t => t.status === 'done').length,
+    inProgress: tasks.filter(t => t.status === 'in-progress').length,
+    backlog: tasks.filter(t => t.status === 'backlog').length,
+  };
+
   return (
     <>
       <Header
         title="AI Chat"
         subtitle="Project-aware AI assistant"
-        // @ts-expect-error - Custom action slot
+        // Custom action slot
         action={
-          <Badge variant="outline" className="gap-1">
-            <Sparkles className="h-3 w-3" />
-            GPT-4 Powered
-          </Badge>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={fetchProjectData}>
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Refresh
+            </Button>
+            <Badge variant="outline" className="gap-1">
+              <Sparkles className="h-3 w-3" />
+              Connected
+            </Badge>
+          </div>
         }
       />
 
@@ -179,7 +288,7 @@ export default function ChatPage() {
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 onKeyPress={handleKeyPress}
-                placeholder="Ask about the project..."
+                placeholder="Ask about your project..."
                 className="flex-1 min-h-[44px] max-h-32 resize-none rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
                 rows={1}
               />
@@ -194,38 +303,56 @@ export default function ChatPage() {
           </div>
         </div>
 
-        {/* Sidebar - Suggested Questions */}
-        <div className="w-72 border-l p-4 hidden lg:block">
-          <h3 className="font-semibold mb-3 text-sm">Suggested Questions</h3>
-          <div className="space-y-2">
-            {suggestedQuestions.map((question, i) => (
-              <button
-                key={i}
-                onClick={() => setInputValue(question)}
-                className="w-full text-left p-2 rounded-lg bg-secondary/50 hover:bg-secondary transition-colors text-sm text-muted-foreground hover:text-foreground"
-              >
-                {question}
-              </button>
-            ))}
+        {/* Sidebar */}
+        <div className="w-72 border-l p-4 hidden lg:block space-y-4 overflow-y-auto">
+          {/* Suggested Questions */}
+          <div>
+            <h3 className="font-semibold mb-3 text-sm">Suggested Questions</h3>
+            <div className="space-y-2">
+              {suggestedQuestions.map((q, i) => (
+                <button
+                  key={i}
+                  onClick={() => setInputValue(q)}
+                  className="w-full text-left p-2 rounded-lg bg-secondary/50 hover:bg-secondary transition-colors text-sm text-muted-foreground hover:text-foreground"
+                >
+                  {q}
+                </button>
+              ))}
+            </div>
           </div>
 
-          <h3 className="font-semibold mt-6 mb-3 text-sm">Quick Stats</h3>
-          <Card>
-            <CardContent className="p-3 space-y-2">
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Tasks Completed</span>
-                <span className="font-medium">3</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">In Progress</span>
-                <span className="font-medium">2</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Messages</span>
-                <span className="font-medium">{messages.length}</span>
-              </div>
-            </CardContent>
-          </Card>
+          {/* Quick Stats */}
+          <div>
+            <h3 className="font-semibold mb-3 text-sm">Quick Stats</h3>
+            <Card>
+              <CardContent className="p-3 space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Total Tasks</span>
+                  <span className="font-medium">{stats.total}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Done</span>
+                  <span className="font-medium text-emerald-500">{stats.done}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">In Progress</span>
+                  <span className="font-medium text-amber-500">{stats.inProgress}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Backlog</span>
+                  <span className="font-medium">{stats.backlog}</span>
+                </div>
+                <div className="flex justify-between text-sm pt-2 border-t">
+                  <span className="text-muted-foreground">Documents</span>
+                  <span className="font-medium">{documents.length}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Requirements</span>
+                  <span className="font-medium">{requirements.length}</span>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         </div>
       </div>
     </>
